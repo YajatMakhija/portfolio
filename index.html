@@ -376,21 +376,31 @@ $('copy').onclick = async () => {
 fetch('https://github-contributions-api.jogruber.de/v4/YajatMakhija?y=last')
   .then(r => r.ok ? r.json() : Promise.reject())
   .then(d => {
-    const days = d.contributions;
-    if (!days || !days.length) throw 0;
-    const total = d.total?.lastYear ?? days.reduce((s, x) => s + x.count, 0);
+    // third-party data: validate every field and only ever write it as text/attributes, never HTML
+    const days = (Array.isArray(d.contributions) ? d.contributions : []).filter(x =>
+      x && /^\d{4}-\d{2}-\d{2}$/.test(x.date) && Number.isInteger(x.count) && x.count >= 0
+        && Number.isInteger(x.level) && x.level >= 0 && x.level <= 4);
+    if (!days.length) throw 0;
+    const t = d.total?.lastYear;
+    const total = Number.isInteger(t) ? t : days.reduce((s, x) => s + x.count, 0);
     $('ghTotal').textContent = `${total} contributions in the last year`;
     const pad = new Date(days[0].date + 'T00:00:00Z').getUTCDay();
     const cells = [...Array(pad).fill(null), ...days];
-    $('ghGrid').innerHTML = cells.map(c => c
-      ? `<i data-l="${c.level}" title="${c.count} on ${c.date}"></i>` : '<i class="pad"></i>').join('');
+    const grid = $('ghGrid'), months = $('ghMonths');
+    grid.replaceChildren(...cells.map(c => {
+      const i = document.createElement('i');
+      if (c) { i.dataset.l = String(c.level); i.title = `${c.count} on ${c.date}`; } else i.className = 'pad';
+      return i;
+    }));
     const weeks = Math.ceil(cells.length / 7), mon = [];
     for (let w = 0; w < weeks; w++) {
       const c = cells.slice(w * 7, w * 7 + 7).find(Boolean);
       const dt = c && new Date(c.date + 'T00:00:00Z');
-      mon.push(`<span>${dt && dt.getUTCDate() <= 7 ? dt.toLocaleString('en', { month: 'short', timeZone: 'UTC' }) : ''}</span>`);
+      const s = document.createElement('span');
+      s.textContent = dt && dt.getUTCDate() <= 7 ? dt.toLocaleString('en', { month: 'short', timeZone: 'UTC' }) : '';
+      mon.push(s);
     }
-    $('ghMonths').innerHTML = mon.join('');
+    months.replaceChildren(...mon);
   })
   .catch(() => { $('gh').hidden = true; });
 </script>
